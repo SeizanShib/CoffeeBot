@@ -6,18 +6,20 @@ from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+# Aktiver debug-logging tidlig
 logging.basicConfig(level=logging.DEBUG)
 
 # Miljøvariabler
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot-vra9.onrender.com
 
-# Flask
+# Flask webserver
 app = Flask(__name__)
 
 # Telegram-bot
 application = Application.builder().token(BOT_TOKEN).build()
 
+# Kaffe-resultater
 coffee_results = {
     1: "Burnt battery acid", 2: "Cold and sour", 3: "Instant regret", 4: "Overbrewed sludge",
     5: "Watery disappointment", 6: "Smells better than it tastes", 7: "Vending machine sadness",
@@ -51,30 +53,30 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"🔥 Feil i coffee-funksjonen: {e}")
         await update.message.reply_text("⚠️ Noe gikk galt med kaffen 😬")
 
-
+# Legg til kommando-handler
 application.add_handler(CommandHandler("coffee", coffee))
 
-# Webhook
+# Webhook-endepunkt
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        logging.debug("Mottatt webhook-kall")
+        logging.debug("📥 Mottatt webhook-kall")
         data = request.get_json(force=True)
-        logging.debug(f"Webhook payload: {data}")
+        logging.debug(f"📦 Webhook payload: {data}")
         update = Update.de_json(data, application.bot)
-        logging.debug("Opprettet Telegram Update-objekt")
+        logging.debug("✅ Opprettet Telegram Update-objekt")
 
         loop = asyncio.get_event_loop()
         loop.create_task(application.process_update(update))
-        logging.debug("Update prosessering startet")
+        logging.debug("🔁 Update prosessering startet")
 
         return "ok"
     except Exception as e:
         import traceback
-        logging.error("Exception i webhook: %s", traceback.format_exc())
+        logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
 
-# Status
+# Status-endepunkt
 @app.get("/")
 def home():
     return "CoffeeBot is alive ☕", 200
