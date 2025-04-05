@@ -76,14 +76,15 @@ def webhook():
             await application.process_update(update)
             logging.debug("🔁 Update prosessering ferdig")
 
-        # Bruk loop fra application og start coroutine tråd-sikkert
-        asyncio.run_coroutine_threadsafe(handle_update(), application._loop)
+        # Dette er den korrekte måten å kjøre async tasks på i PTB 20+
+        application.create_task(handle_update())
 
         return "ok"
     except Exception as e:
         import traceback
         logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
+
 
 
 # ✅ Status-endepunkt
