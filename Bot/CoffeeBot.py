@@ -1,21 +1,23 @@
 import os
 import random
 import asyncio
+import logging
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Hent miljøvariabler
+logging.basicConfig(level=logging.DEBUG)
+
+# Miljøvariabler
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot-vra9.onrender.com
 
-# Flask webserver
+# Flask
 app = Flask(__name__)
 
-# Sett opp Telegram-bot
+# Telegram-bot
 application = Application.builder().token(BOT_TOKEN).build()
 
-# Resultater for kaffe-terningkast
 coffee_results = {
     1: "Burnt battery acid", 2: "Cold and sour", 3: "Instant regret", 4: "Overbrewed sludge",
     5: "Watery disappointment", 6: "Smells better than it tastes", 7: "Vending machine sadness",
@@ -30,28 +32,34 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     roll = random.randint(1, 20)
     result = coffee_results[roll]
     caption = f"🎲 You rolled a *{roll}*\n☕ Result: _{result}_"
-    image_path = os.path.join("Bot", "Dice", f"{roll}.png")
+    image_path = os.path.join(os.getcwd(), "Bot", "Dice", f"{roll}.png")
 
     with open(image_path, "rb") as img:
         await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
 
-# Legg til handler
 application.add_handler(CommandHandler("coffee", coffee))
 
-# Webhook-endepunkt (Flask må kalle async via asyncio)
+# Webhook
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
+        logging.debug("Mottatt webhook-kall")
         data = request.get_json(force=True)
+        logging.debug(f"Webhook payload: {data}")
         update = Update.de_json(data, application.bot)
-        asyncio.run(application.process_update(update))  # Kjør async call i sync kontekst
+        logging.debug("Opprettet Telegram Update-objekt")
+
+        loop = asyncio.get_event_loop()
+        loop.create_task(application.process_update(update))
+        logging.debug("Update prosessering startet")
+
         return "ok"
     except Exception as e:
         import traceback
-        logging.error("Exception in webhook handler: %s", traceback.format_exc())
+        logging.error("Exception i webhook: %s", traceback.format_exc())
         return "error", 500
 
-# Statussjekk
+# Status
 @app.get("/")
 def home():
     return "CoffeeBot is alive ☕", 200
