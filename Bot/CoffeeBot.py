@@ -48,3 +48,9 @@ async def webhook():
 def root():
     return "CoffeeBot is alive and brewing ☕", 200
 
+@app.before_first_request
+def set_webhook():
+    url = f"{BASE_URL}/webhook"
+    bot.set_webhook(url=url)
+
+
