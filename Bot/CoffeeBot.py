@@ -55,11 +55,10 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"🔥 Feil i coffee-funksjonen: {e}")
         await update.message.reply_text("⚠️ Noe gikk galt med kaffen 😬")
 
-
 # Legg til kommando-handler
 application.add_handler(CommandHandler("coffee", coffee))
 
-# Webhook-endepunkt med initialize()
+# Webhook-endepunkt (Application er nå initialisert på forhånd)
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -69,14 +68,8 @@ def webhook():
         update = Update.de_json(data, application.bot)
         logging.debug("✅ Opprettet Telegram Update-objekt")
 
-        async def handle_update():
-            if not application.initialized:
-                logging.debug("🛠️ Initialiserer Telegram Application")
-                await application.initialize()
-            await application.process_update(update)
-
         loop = asyncio.get_event_loop()
-        loop.create_task(handle_update())
+        loop.create_task(application.process_update(update))
         logging.debug("🔁 Update prosessering startet")
 
         return "ok"
@@ -89,3 +82,13 @@ def webhook():
 @app.get("/")
 def home():
     return "CoffeeBot is alive ☕", 200
+
+# ✅ Initier Telegram-bot én gang når skriptet starter
+async def setup():
+    if not application.initialized:
+        logging.debug("🔧 Initialiserer Telegram Application ved oppstart")
+        await application.initialize()
+        logging.debug("✅ Telegram Application er klar")
+
+# Kjør oppsett nå
+asyncio.run(setup())
