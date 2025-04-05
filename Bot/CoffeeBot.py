@@ -46,4 +46,5 @@ async def webhook():
 # Test-endepunkt (valgfritt)
 @app.route("/")
 def root():
-    return "CoffeeBot is alive!", 200
+    return "CoffeeBot is alive and brewing ☕", 200
+
