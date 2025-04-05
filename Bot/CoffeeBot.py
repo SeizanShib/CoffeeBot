@@ -68,15 +68,15 @@ def webhook():
         update = Update.de_json(data, application.bot)
         logging.debug("✅ Opprettet Telegram Update-objekt")
 
-        loop = asyncio.get_event_loop()
-        loop.create_task(application.process_update(update))
-        logging.debug("🔁 Update prosessering startet")
+        asyncio.run(application.process_update(update))
+        logging.debug("🔁 Update prosessering ferdig")
 
         return "ok"
     except Exception as e:
         import traceback
         logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
+
 
 # Status-endepunkt
 @app.get("/")
