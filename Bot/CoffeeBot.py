@@ -34,6 +34,10 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = f"🎲 You rolled a *{roll}*\n☕ Result: _{result}_"
     image_path = os.path.join(os.getcwd(), "Bot", "Dice", f"{roll}.png")
 
+    if not os.path.exists(image_path):
+        await update.message.reply_text("⚠️ Bilde ikke funnet!")
+        return
+
     with open(image_path, "rb") as img:
         await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
 
