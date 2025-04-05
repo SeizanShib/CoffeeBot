@@ -59,7 +59,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ Legg til handler
 application.add_handler(CommandHandler("coffee", coffee))
 
-# ✅ Webhook-endepunkt (bruker asyncio.run for korrekt asynk utførelse)
+# Webhook-endepunkt (tråd-sikker async kjøring)
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -76,14 +76,15 @@ def webhook():
             await application.process_update(update)
             logging.debug("🔁 Update prosessering ferdig")
 
-        # ✅ Kjør webhook async-funksjon i Flask
-        asyncio.run(handle_update())
+        # Bruk loop fra application og start coroutine tråd-sikkert
+        asyncio.run_coroutine_threadsafe(handle_update(), application._loop)
 
         return "ok"
     except Exception as e:
         import traceback
         logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
+
 
 # ✅ Status-endepunkt
 @app.get("/")
