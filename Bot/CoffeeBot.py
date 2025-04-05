@@ -31,6 +31,8 @@ coffee_results = {
 
 # /coffee-kommando
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.debug("🚀 coffee()-kommando trigget")
+
     try:
         roll = random.randint(1, 20)
         result = coffee_results[roll]
@@ -52,6 +54,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.error(f"🔥 Feil i coffee-funksjonen: {e}")
         await update.message.reply_text("⚠️ Noe gikk galt med kaffen 😬")
+
 
 # Legg til kommando-handler
 application.add_handler(CommandHandler("coffee", coffee))
