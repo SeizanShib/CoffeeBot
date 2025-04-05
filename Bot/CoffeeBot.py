@@ -29,19 +29,28 @@ coffee_results = {
 
 # /coffee-kommando
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    roll = random.randint(1, 20)
-    result = coffee_results[roll]
-    caption = f"🎲 You rolled a *{roll}*\n☕ Result: _{result}_"
-    image_path = os.path.join(os.getcwd(), "Bot", "Dice", f"{roll}.png")
-logging.debug(f"📁 current working dir: {os.getcwd()}")
-logging.debug(f"🔍 forventet bilde: {image_path}")
+    try:
+        roll = random.randint(1, 20)
+        result = coffee_results[roll]
+        caption = f"🎲 You rolled a *{roll}*\n☕ Result: _{result}_"
 
-    if not os.path.exists(image_path):
-        await update.message.reply_text("⚠️ Bilde ikke funnet!")
-        return
+        image_path = os.path.join(os.getcwd(), "Bot", "Dice", f"{roll}.png")
+        logging.debug(f"📁 current working dir: {os.getcwd()}")
+        logging.debug(f"🔍 forventet bilde: {image_path}")
 
-    with open(image_path, "rb") as img:
-        await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
+        if not os.path.exists(image_path):
+            await update.message.reply_text("⚠️ Bilde ikke funnet!")
+            return
+
+        with open(image_path, "rb") as img:
+            await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
+
+        logging.debug(f"✅ Sendte bilde for roll {roll}")
+
+    except Exception as e:
+        logging.error(f"🔥 Feil i coffee-funksjonen: {e}")
+        await update.message.reply_text("⚠️ Noe gikk galt med kaffen 😬")
+
 
 application.add_handler(CommandHandler("coffee", coffee))
 
