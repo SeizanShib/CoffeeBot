@@ -4,19 +4,19 @@ from flask import Flask, request
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Miljøvariabler for Render-oppsett
+# Miljøvariabler fra Render
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BASE_URL = os.environ.get("BASE_URL")  # https://coffeebot.onrender.com
+BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot.onrender.com
 
-# Flask-app og Telegram-bot instans
+# Flask og Telegram-klient
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
 
-# Initier telegram-appen én gang på toppen
+# Telegram application (oppsett for webhook)
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("coffee", lambda u, c: coffee(u, c)))
 
-# D20-resultater
+# Coffee-rull-resultater
 coffee_results = {
     1: "Burnt battery acid", 2: "Cold and sour", 3: "Instant regret", 4: "Overbrewed sludge",
     5: "Watery disappointment", 6: "Smells better than it tastes", 7: "Vending machine sadness",
@@ -26,7 +26,7 @@ coffee_results = {
     17: "Tastes like victory", 18: "Masterwork espresso", 19: "Divine roast", 20: "COFFEE OF THE GODS"
 }
 
-# Kommando: /coffee
+# Kaffe-kommandoen
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     roll = random.randint(1, 20)
     result = coffee_results[roll]
@@ -36,21 +36,21 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(image_path, "rb") as img:
         await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
 
-# Webhook-endepunkt som Telegram bruker
+# Webhook-endepunkt som Telegram kontakter
 @app.route("/webhook", methods=["POST"])
 async def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
     await application.process_update(update)
     return "ok", 200
 
-# Test-endepunkt (valgfritt)
-@app.route("/")
-def root():
-    return "CoffeeBot is alive and brewing ☕", 200
-
+# Automatisk webhook-registrering ved første request
 @app.before_first_request
 def set_webhook():
-    url = f"{BASE_URL}/webhook"
-    bot.set_webhook(url=url)
+    webhook_url = f"{BASE_URL}/webhook"
+    bot.set_webhook(url=webhook_url)
+    print(f"✅ Webhook set to: {webhook_url}")
 
-
+# Rot-endepunkt for helsesjekk
+@app.route("/")
+def root():
+    return "CoffeeBot is alive!", 200
