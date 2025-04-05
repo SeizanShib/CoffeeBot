@@ -1,25 +1,26 @@
 import os
 import random
-import asyncio
 import logging
+import asyncio
+from threading import Thread
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ✅ Aktiver debug-logging
+# Aktiver logging
 logging.basicConfig(level=logging.DEBUG)
 
-# ✅ Miljøvariabler fra Render.com
+# Miljøvariabler
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot-vra9.onrender.com
+BASE_URL = os.environ.get("BASE_URL")  # Eks: https://coffeebot-abc123.onrender.com
 
-# ✅ Flask webserver
+# Flask server
 app = Flask(__name__)
 
-# ✅ Telegram-bot
+# Telegram-bot
 application = Application.builder().token(BOT_TOKEN).build()
 
-# ✅ Kaffe-resultater (d20)
+# 🎲 Kaffe-resultater
 coffee_results = {
     1: "Burnt battery acid", 2: "Cold and sour", 3: "Instant regret", 4: "Overbrewed sludge",
     5: "Watery disappointment", 6: "Smells better than it tastes", 7: "Vending machine sadness",
@@ -29,7 +30,7 @@ coffee_results = {
     17: "Tastes like victory", 18: "Masterwork espresso", 19: "Divine roast", 20: "COFFEE OF THE GODS"
 }
 
-# ✅ /coffee-kommando
+# 🎯 /coffee-kommando
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.debug("🚀 coffee()-kommando trigget")
 
@@ -55,11 +56,13 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"🔥 Feil i coffee-funksjonen: {e}")
         await update.message.reply_text("⚠️ Noe gikk galt med kaffen 😬")
 
-
-# ✅ Legg til handler
+# Legg til kommandohandler
 application.add_handler(CommandHandler("coffee", coffee))
 
-# Webhook-endepunkt (tråd-sikker async kjøring)
+# 📡 Webhook-endepunkt med global event loop
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -76,8 +79,11 @@ def webhook():
             await application.process_update(update)
             logging.debug("🔁 Update prosessering ferdig")
 
-        # Kjør den async-funksjonen rett med asyncio.run()
-        asyncio.run(handle_update())
+        def run_task():
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(handle_update())
+
+        Thread(target=run_task).start()
 
         return "ok"
     except Exception as e:
@@ -85,8 +91,7 @@ def webhook():
         logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
 
-
-# ✅ Status-endepunkt
+# Status-check
 @app.get("/")
 def home():
     return "CoffeeBot is alive ☕", 200
