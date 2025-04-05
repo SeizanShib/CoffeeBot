@@ -68,14 +68,22 @@ def webhook():
         update = Update.de_json(data, application.bot)
         logging.debug("✅ Opprettet Telegram Update-objekt")
 
-        asyncio.run(application.process_update(update))
-        logging.debug("🔁 Update prosessering ferdig")
+        async def handle_update():
+            if not application._initialized:
+                logging.debug("🛠️ Initialiserer Telegram Application")
+                await application.initialize()
+            await application.process_update(update)
+            logging.debug("🔁 Update prosessering ferdig")
+
+        # 🔧 Kjør async funksjon trygt i Flask
+        asyncio.run(handle_update())
 
         return "ok"
     except Exception as e:
         import traceback
         logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
+
 
 
 # Status-endepunkt
