@@ -6,7 +6,7 @@ from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Aktiver debug-logging tidlig
+# Aktiver debug-logging
 logging.basicConfig(level=logging.DEBUG)
 
 # Miljøvariabler
@@ -59,7 +59,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Legg til kommando-handler
 application.add_handler(CommandHandler("coffee", coffee))
 
-# Webhook-endepunkt
+# Webhook-endepunkt med initialize()
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -69,8 +69,14 @@ def webhook():
         update = Update.de_json(data, application.bot)
         logging.debug("✅ Opprettet Telegram Update-objekt")
 
+        async def handle_update():
+            if not application.initialized:
+                logging.debug("🛠️ Initialiserer Telegram Application")
+                await application.initialize()
+            await application.process_update(update)
+
         loop = asyncio.get_event_loop()
-        loop.create_task(application.process_update(update))
+        loop.create_task(handle_update())
         logging.debug("🔁 Update prosessering startet")
 
         return "ok"
