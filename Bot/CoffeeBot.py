@@ -76,15 +76,14 @@ def webhook():
             await application.process_update(update)
             logging.debug("🔁 Update prosessering ferdig")
 
-        # Dette er den korrekte måten å kjøre async tasks på i PTB 20+
-        application.create_task(handle_update())
+        # Kjør den async-funksjonen rett med asyncio.run()
+        asyncio.run(handle_update())
 
         return "ok"
     except Exception as e:
         import traceback
         logging.error("❌ Exception i webhook: %s", traceback.format_exc())
         return "error", 500
-
 
 
 # ✅ Status-endepunkt
