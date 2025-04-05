@@ -45,9 +45,9 @@ async def webhook():
 
 # Automatisk webhook-registrering ved første request
 @app.before_first_request
-def set_webhook():
+async def set_webhook():
     webhook_url = f"{BASE_URL}/webhook"
-    bot.set_webhook(url=webhook_url)
+    await bot.set_webhook(url=webhook_url)
     print(f"✅ Webhook set to: {webhook_url}")
 
 # Rot-endepunkt for helsesjekk
