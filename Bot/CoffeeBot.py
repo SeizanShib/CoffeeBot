@@ -1,5 +1,6 @@
 import os
 import random
+import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -38,12 +39,17 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(CommandHandler("coffee", coffee))
 
 # Webhook-endepunkt (Flask må kalle async via asyncio)
-@app.post("/webhook")
-async def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
-    return "ok"
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    try:
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
+        asyncio.run(application.process_update(update))  # Kjør async call i sync kontekst
+        return "ok"
+    except Exception as e:
+        import traceback
+        logging.error("Exception in webhook handler: %s", traceback.format_exc())
+        return "error", 500
 
 # Statussjekk
 @app.get("/")
