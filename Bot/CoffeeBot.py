@@ -85,10 +85,10 @@ def home():
 
 # ✅ Initier Telegram-bot én gang når skriptet starter
 async def setup():
-    if not application.initialized:
-        logging.debug("🔧 Initialiserer Telegram Application ved oppstart")
-        await application.initialize()
-        logging.debug("✅ Telegram Application er klar")
+    logging.debug("🔧 Initialiserer Telegram Application ved oppstart")
+    await application.initialize()
+    logging.debug("✅ Telegram Application er klar")
 
 # Kjør oppsett nå
 asyncio.run(setup())
+
