@@ -16,6 +16,15 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN er ikke satt i miljøvariabler")
 
+import asyncio
+
+# Etter at application = Application.builder().token(TOKEN).build() er definert
+async def initialize_application():
+    await application.initialize()
+
+asyncio.run(initialize_application())
+
+
 # Flask app for webhook
 app = Flask(__name__)
 
@@ -212,9 +221,9 @@ def webhook(secret):
     if secret != WEBHOOK_SECRET:
         return "Unauthorized", 403
     update = Update.de_json(request.get_json(force=True), application.bot)
-    import asyncio
     asyncio.run(application.process_update(update))
     return "OK"
+
 
 @app.route("/")
 def index():
