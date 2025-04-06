@@ -26,9 +26,6 @@ logging.basicConfig(handlers=[log_handler], level=logging.DEBUG,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("CoffeeBot")
 
-# === Flask app ===
-app = Flask(__name__)
-
 # === Filbaner ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DICE_PATH = os.path.join(BASE_DIR, "Dice")
@@ -207,7 +204,7 @@ async def whitelist_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"Group {group_id} was not blacklisted.")
 
-# === Bygg bot-applikasjonen ===
+# === Bygg Telegram-bot ===
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("coffeeon", enable_bot))
@@ -217,18 +214,26 @@ application.add_handler(CommandHandler("coffeewhitelist", whitelist_group))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee. Admins: /coffeeon /coffeeoff. Owner: /coffeeban /coffeewhitelist.")))
 
-# === Flask webhook-endepunkt ===
+# === Flask-app og webhook ===
+app = Flask(__name__)
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
+    logger.info("✅ Webhook route hit")
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.create_task(application.process_update(update))
     return "ok", 200
 
 @app.route("/")
 def index():
-    return "CoffeeBot is live ☕"
+    return "CoffeeBot is live ☕", 200
+
+@app.route("/debug")
+def debug():
+    return "✅ Flask is working fine.", 200
 
 # === Start Flask-server ===
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    logger.info(f"🚀 Starting Flask server on port {port}")
     app.run(host="0.0.0.0", port=port)
