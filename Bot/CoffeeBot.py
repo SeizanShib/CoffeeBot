@@ -4,44 +4,46 @@ import logging
 import random
 import time
 from flask import Flask, request
-from telegram import Update, constants
+from telegram import Update, constants, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
-
 from logging.handlers import RotatingFileHandler
 
-# Logging setup
-LOG_FILE = "coffee.log"
-log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1000000, backupCount=3)
-logging.basicConfig(handlers=[log_handler], level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("CoffeeBot")
-
-# Telegram Bot Token
+# === Miljøvariabler ===
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot.onrender.com
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 
-# Flask app for webhook
+if not BOT_TOKEN:
+    raise RuntimeError("❌ BOT_TOKEN mangler! Sjekk miljøvariabler.")
+if not BASE_URL:
+    raise RuntimeError("❌ BASE_URL mangler! Sjekk miljøvariabler.")
+
+# === Logging setup ===
+LOG_FILE = "coffee.log"
+log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1000000, backupCount=3)
+logging.basicConfig(handlers=[log_handler], level=logging.DEBUG,
+                    format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("CoffeeBot")
+
+# === Flask app ===
 app = Flask(__name__)
 
-# Path til bildene
+# === Filbaner ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DICE_PATH = os.path.join(BASE_DIR, "Dice")
-
-# Path til gruppedata
 GROUP_DATA_FILE = os.path.join(BASE_DIR, "group_data.json")
+BLACKLIST_FILE = os.path.join(BASE_DIR, "blacklist.json")
+
+# === Initialiser filer ===
 if not os.path.exists(GROUP_DATA_FILE):
     with open(GROUP_DATA_FILE, "w") as f:
         json.dump({}, f)
-
-# Path til blacklist
-BLACKLIST_FILE = os.path.join(BASE_DIR, "blacklist.json")
 if not os.path.exists(BLACKLIST_FILE):
     with open(BLACKLIST_FILE, "w") as f:
         json.dump([], f)
 
-ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
-
-# Last/save helpers
+# === Hjelpefunksjoner ===
 def load_group_data():
     with open(GROUP_DATA_FILE, "r") as f:
         return json.load(f)
@@ -58,7 +60,6 @@ def save_blacklist(data):
     with open(BLACKLIST_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# Notify admin
 def notify_admin(context, message):
     try:
         if ADMIN_USER_ID:
@@ -66,7 +67,7 @@ def notify_admin(context, message):
     except Exception as e:
         logger.error(f"Failed to notify admin: {e}")
 
-# Coffee handler
+# === Kommandofunksjoner ===
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or not update.message.text:
         return
@@ -132,12 +133,12 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_data[chat_id] = group
     save_group_data(group_data)
 
-# Toggle bot on/off
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None:
         return
     chat = update.effective_chat
     chat_id = str(chat.id)
+
     if chat_id in load_blacklist():
         await update.message.reply_text("🚫 This group is blacklisted from using CoffeeBot.")
         return
@@ -159,6 +160,7 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     chat = update.effective_chat
     chat_id = str(chat.id)
+
     if chat_id in load_blacklist():
         await update.message.reply_text("🚫 This group is blacklisted from using CoffeeBot.")
         return
@@ -175,15 +177,12 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_group_data(data)
     await update.message.reply_text("☕ CoffeeBot has been disabled in this group.")
 
-# Admin-only ban/whitelist
 async def ban_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(update.effective_user.id) != ADMIN_USER_ID:
         return
-
     if not context.args:
         await update.message.reply_text("Usage: /coffeeban <group_id>")
         return
-
     group_id = context.args[0]
     blacklist = load_blacklist()
     if group_id not in blacklist:
@@ -196,11 +195,9 @@ async def ban_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def whitelist_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(update.effective_user.id) != ADMIN_USER_ID:
         return
-
     if not context.args:
         await update.message.reply_text("Usage: /coffeewhitelist <group_id>")
         return
-
     group_id = context.args[0]
     blacklist = load_blacklist()
     if group_id in blacklist:
@@ -210,8 +207,8 @@ async def whitelist_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"Group {group_id} was not blacklisted.")
 
-# Build app
-application = Application.builder().token(TOKEN).build()
+# === Bygg bot-applikasjonen ===
+application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("coffeeon", enable_bot))
 application.add_handler(CommandHandler("coffeeoff", disable_bot))
@@ -220,6 +217,7 @@ application.add_handler(CommandHandler("coffeewhitelist", whitelist_group))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee. Admins: /coffeeon /coffeeoff. Owner: /coffeeban /coffeewhitelist.")))
 
+# === Flask webhook-endepunkt ===
 @app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
@@ -229,3 +227,8 @@ def webhook():
 @app.route("/")
 def index():
     return "CoffeeBot is live ☕"
+
+# === Start Flask-server ===
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
