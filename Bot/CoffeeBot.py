@@ -135,18 +135,25 @@ def webhook(secret):
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
 
+        async def safe_process(update):
+            try:
+                await application.process_update(update)
+            except Exception as e:
+                logger.exception("process_update feilet!")
+
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        loop.create_task(application.process_update(update))
+        loop.create_task(safe_process(update))
         return "OK", 200
 
     except Exception as e:
-        logger.exception("Feil i webhook-handler")  # <- dette gir stacktrace i loggene
+        logger.exception("Feil i webhook-handler")
         return f"Webhook internal error: {e}", 500
+
 
 # Hjemmerute setter webhook automatisk
 @app.route("/")
