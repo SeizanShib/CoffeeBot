@@ -147,7 +147,7 @@ def webhook(secret):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        loop.create_task(safe_process(update))
+        asyncio.run(safe_process(update))
         return "OK", 200
 
     except Exception as e:
