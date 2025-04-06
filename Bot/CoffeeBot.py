@@ -5,7 +5,7 @@ import random
 import time
 from flask import Flask, request
 from telegram import Update, constants
-from telegram.ext import Application, CommandHandler, ContextTypes, MyChatMemberHandler
+from telegram.ext import Application, CommandHandler, ContextTypes #MyChatMemberHandler
 
 from logging.handlers import RotatingFileHandler
 
@@ -234,7 +234,7 @@ application.add_handler(CommandHandler("coffeeban", ban_group))
 application.add_handler(CommandHandler("coffeewhitelist", whitelist_group))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee. Admins: /coffeeon /coffeeoff. Owner: /coffeeban /coffeewhitelist.")))
-application.add_handler(MyChatMemberHandler(handle_my_chat_member))
+#application.add_handler(MyChatMemberHandler(handle_my_chat_member))
 
 @app.route(f"/webhook/<secret>", methods=["POST"])
 def webhook(secret):
