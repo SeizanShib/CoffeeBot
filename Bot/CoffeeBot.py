@@ -7,7 +7,7 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot.onrender.com
+BASE_URL = os.environ.get("BASE_URL")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
 # Telegram bot application
@@ -31,21 +31,19 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     roll = random.randint(1, 20)
     result = coffee_results[roll]
     caption = f"🎲 You rolled a *{roll}*\n☕ Result: _{result}_"
-    image_path = os.path.join("Bot", "Dice", f"{roll}.png")  # tilpasset din mappestruktur
+    image_path = os.path.join("Bot", "Dice", f"{roll}.png")
 
     with open(image_path, "rb") as img:
         await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
 
-# Legg til handleren i Application
 application.add_handler(CommandHandler("coffee", coffee))
 
-# Webhook route (må være synkron for Flask)
+# ✅ Riktig webhook-path, basert på din miljøvariabel
 @app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.create_task(application.process_update(update))
     return "ok", 200
-
 
 @app.route("/")
 def home():
