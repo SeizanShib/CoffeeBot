@@ -8,6 +8,7 @@ from telegram.ext import (
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot.onrender.com
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
 # Telegram bot application
 application = Application.builder().token(BOT_TOKEN).build()
@@ -39,11 +40,12 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(CommandHandler("coffee", coffee))
 
 # Webhook route (må være synkron for Flask)
-@app.route("/webhook", methods=["POST"])
+@app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.create_task(application.process_update(update))
     return "ok", 200
+
 
 @app.route("/")
 def home():
