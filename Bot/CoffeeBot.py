@@ -19,6 +19,9 @@ if not BOT_TOKEN:
 if not BASE_URL:
     raise RuntimeError("❌ BASE_URL mangler! Sjekk miljøvariabler.")
 
+# Flask web server
+app = Flask(__name__)
+
 # === Logging setup ===
 LOG_FILE = "coffee.log"
 log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1000000, backupCount=3)
