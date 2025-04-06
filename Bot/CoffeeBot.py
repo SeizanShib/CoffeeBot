@@ -221,7 +221,7 @@ application.add_handler(CommandHandler("coffeewhitelist", whitelist_group))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee. Admins: /coffeeon /coffeeoff. Owner: /coffeeban /coffeewhitelist.")))
 
-@app.route(f"/webhook/<secret>", methods=["POST"])
+@app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook(secret):
     if secret != WEBHOOK_SECRET:
         return "Unauthorized", 403
