@@ -4,7 +4,7 @@ import logging
 import random
 import time
 from flask import Flask, request
-from telegram import Update, constants, Bot
+from telegram import Update, constants
 from telegram.ext import Application, CommandHandler, ContextTypes
 from logging.handlers import RotatingFileHandler
 
@@ -231,9 +231,3 @@ def index():
 @app.route("/debug")
 def debug():
     return "✅ Flask is working fine.", 200
-
-# === Start Flask-server ===
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    logger.info(f"🚀 Starting Flask server on port {port}")
-    app.run(host="0.0.0.0", port=port)
