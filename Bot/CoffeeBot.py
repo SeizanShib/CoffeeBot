@@ -39,11 +39,16 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(CommandHandler("coffee", coffee))
 
 # ✅ Riktig webhook-path, basert på din miljøvariabel
-@app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
-def webhook():
+@app.route(f"/webhook/<secret>", methods=["POST"])
+def webhook(secret):
+    if secret != WEBHOOK_SECRET:
+        return "Unauthorized", 403
+
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.create_task(application.process_update(update))
+    import asyncio
+    asyncio.run(application.process_update(update))
     return "ok", 200
+
 
 @app.route("/")
 def home():
