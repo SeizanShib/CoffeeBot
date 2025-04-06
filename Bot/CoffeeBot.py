@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import asyncio
+import threading
 from flask import Flask, request
 from telegram import Update, Bot, constants
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -164,3 +165,11 @@ def index():
     except Exception as e:
         logger.exception("Feil ved webhook-setup")
         return f"Feil ved webhook-setup: {str(e)}", 500
+
+# Start application manuelt i bakgrunnen
+
+def start_bot():
+    asyncio.run(application.initialize())
+    logger.info("Bot initialized")
+
+threading.Thread(target=start_bot).start()
