@@ -10,10 +10,12 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from logging.handlers import RotatingFileHandler
 
 # Logging setup
-LOG_FILE = "coffee.log"
-log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1000000, backupCount=3)
-logging.basicConfig(handlers=[log_handler], level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("CoffeeBot")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[RotatingFileHandler("coffee.log", maxBytes=1000000, backupCount=3)]
+)
+logger = logging.getLogger()
 
 # Telegram Bot Token og Secret
 TOKEN = os.getenv("BOT_TOKEN")
@@ -117,16 +119,13 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_data[chat_id] = group
     save_group_data(group_data)
 
-# Toggle on/off og admin kommandoer er som før (utelatt her for korthet)
-# ...
-
 # Telegram Application bygges
 application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee.")))
 
-# Webhook endpoint
+# Webhook endpoint med feilsikring
 @app.route(f"/webhook/<secret>", methods=["POST"])
 def webhook(secret):
     if secret != WEBHOOK_SECRET:
@@ -154,7 +153,6 @@ def webhook(secret):
         logger.exception("Feil i webhook-handler")
         return f"Webhook internal error: {e}", 500
 
-
 # Hjemmerute setter webhook automatisk
 @app.route("/")
 def index():
@@ -164,4 +162,5 @@ def index():
         loop.run_until_complete(Bot(TOKEN).set_webhook(url=f"{BASE_URL}/webhook/{WEBHOOK_SECRET}", secret_token=WEBHOOK_SECRET))
         return "CoffeeBot webhook satt! ☕", 200
     except Exception as e:
+        logger.exception("Feil ved webhook-setup")
         return f"Feil ved webhook-setup: {str(e)}", 500
