@@ -141,9 +141,9 @@ def webhook(secret):
             asyncio.set_event_loop(loop)
         loop.create_task(application.process_update(update))
         return "OK", 200
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return "Webhook error", 500
+except Exception as e:
+    logger.exception("Feil i webhook-handler")
+    return f"Webhook internal error: {e}", 500
 
 # Hjemmerute setter webhook automatisk
 @app.route("/")
