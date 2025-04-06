@@ -29,13 +29,13 @@ DICE_PATH = os.path.join(BASE_DIR, "Dice")
 
 # Path til gruppedata
 GROUP_DATA_FILE = os.path.join(BASE_DIR, "group_data.json")
-if not os.path.exists(GROUP_DATA_FILE):
+if not os.path.exists(GROUP_DATA_FILE) or os.path.getsize(GROUP_DATA_FILE) == 0:
     with open(GROUP_DATA_FILE, "w") as f:
         json.dump({}, f)
 
 # Path til blacklist
 BLACKLIST_FILE = os.path.join(BASE_DIR, "blacklist.json")
-if not os.path.exists(BLACKLIST_FILE):
+if not os.path.exists(BLACKLIST_FILE) or os.path.getsize(BLACKLIST_FILE) == 0:
     with open(BLACKLIST_FILE, "w") as f:
         json.dump([], f)
 
