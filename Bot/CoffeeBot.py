@@ -217,12 +217,10 @@ application.add_handler(CommandHandler("coffeewhitelist", whitelist_group))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee. Admins: /coffeeon /coffeeoff. Owner: /coffeeban /coffeewhitelist.")))
 
-# === Flask-app og webhook ===
-app = Flask(__name__)
 
+# Webhook route (må være synkron for Flask)
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    logger.info("✅ Webhook route hit")
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.create_task(application.process_update(update))
     return "ok", 200
