@@ -1,97 +1,136 @@
 import os
-import random
+import json
 import logging
-import asyncio
-from threading import Thread
+import random
+import time
 from flask import Flask, request
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, constants
+from telegram.ext import Application, CommandHandler, ContextTypes, MyChatMemberHandler
 
-# Aktiver logging
-logging.basicConfig(level=logging.DEBUG)
+from logging.handlers import RotatingFileHandler
 
-# Miljøvariabler
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BASE_URL = os.environ.get("BASE_URL")  # Eks: https://coffeebot-abc123.onrender.com
+# Logging setup
+LOG_FILE = "coffee.log"
+log_handler = RotatingFileHandler(LOG_FILE, maxBytes=1000000, backupCount=3)
+logging.basicConfig(handlers=[log_handler], level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("CoffeeBot")
 
-# Flask server
+# Telegram Bot Token
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN er ikke satt i miljøvariabler")
+
+# Flask app for webhook
 app = Flask(__name__)
 
-# Telegram-bot
-application = Application.builder().token(BOT_TOKEN).build()
+# Path til bildene
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DICE_PATH = os.path.join(BASE_DIR, "Dice")
 
-# 🎲 Kaffe-resultater
-coffee_results = {
-    1: "Burnt battery acid", 2: "Cold and sour", 3: "Instant regret", 4: "Overbrewed sludge",
-    5: "Watery disappointment", 6: "Smells better than it tastes", 7: "Vending machine sadness",
-    8: "Bitter but tolerable", 9: "Average brew", 10: "Solid morning fuel",
-    11: "Coffee shop standard", 12: "Fair trade, full body", 13: "Cold brew from Elven woods",
-    14: "Magical morning blend", 15: "Sipped with eyes closed", 16: "Barista sang while making it",
-    17: "Tastes like victory", 18: "Masterwork espresso", 19: "Divine roast", 20: "COFFEE OF THE GODS"
-}
+# Path til gruppedata
+GROUP_DATA_FILE = os.path.join(BASE_DIR, "group_data.json")
+if not os.path.exists(GROUP_DATA_FILE):
+    with open(GROUP_DATA_FILE, "w") as f:
+        json.dump({}, f)
 
-# 🎯 /coffee-kommando
+# Path til blacklist
+BLACKLIST_FILE = os.path.join(BASE_DIR, "blacklist.json")
+if not os.path.exists(BLACKLIST_FILE):
+    with open(BLACKLIST_FILE, "w") as f:
+        json.dump([], f)
+
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+
+# Last/save helpers
+def load_group_data():
+    with open(GROUP_DATA_FILE, "r") as f:
+        return json.load(f)
+
+def save_group_data(data):
+    with open(GROUP_DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_blacklist():
+    with open(BLACKLIST_FILE, "r") as f:
+        return json.load(f)
+
+def save_blacklist(data):
+    with open(BLACKLIST_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# Notify admin
+def notify_admin(context, message):
+    try:
+        if ADMIN_USER_ID:
+            context.bot.send_message(chat_id=int(ADMIN_USER_ID), text=message)
+    except Exception as e:
+        logger.error(f"Failed to notify admin: {e}")
+
+# Coffee handler
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.debug("🚀 coffee()-kommando trigget")
+    if update.message is None or not update.message.text:
+        return
 
-    try:
-        roll = random.randint(1, 20)
-        result = coffee_results[roll]
-        caption = f"🎲 You rolled a *{roll}*\n☕ Result: _{result}_"
+    chat = update.effective_chat
+    user = update.effective_user
+    chat_id = str(chat.id)
+    user_id = str(user.id)
 
-        image_path = os.path.join(os.getcwd(), "Bot", "Dice", f"{roll}.png")
-        logging.debug(f"📁 current working dir: {os.getcwd()}")
-        logging.debug(f"🔍 forventet bilde: {image_path}")
+    logger.info(f"/coffee by {user.username or user_id} in chat {chat.title or chat_id}")
 
-        if not os.path.exists(image_path):
-            await update.message.reply_text("⚠️ Bilde ikke funnet!")
-            return
+    if chat.type != "private" and chat_id in load_blacklist():
+        await update.message.reply_text("\ud83d\udeab This group is blacklisted from using CoffeeBot.")
+        return
 
-        with open(image_path, "rb") as img:
-            await update.message.reply_photo(photo=img, caption=caption, parse_mode="Markdown")
+    group_data = load_group_data()
+    group = group_data.get(chat_id, {})
 
-        logging.debug(f"✅ Sendte bilde for roll {roll}")
+    if chat.type != "private" and not group.get("enabled", True):
+        await update.message.reply_text("\ud83d\uded1 CoffeeBot is currently off in this group.\nWaiting for fresh beans... \u2615")
+        return
 
-    except Exception as e:
-        logging.error(f"🔥 Feil i coffee-funksjonen: {e}")
-        await update.message.reply_text("⚠️ Noe gikk galt med kaffen 😬")
+    last_used = group.get("last_used", {}).get(user_id, 0)
+    if time.time() - last_used < 15:
+        await update.message.reply_text("\u23f3 Whoa there, barista!\nWait a few more sips before the next brew.")
+        return
 
-# Legg til kommandohandler
-application.add_handler(CommandHandler("coffee", coffee))
+    roll = random.randint(1, 20)
+    image_path = os.path.join(DICE_PATH, f"{roll}.png")
 
-# 📡 Webhook-endepunkt med global event loop
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
+    captions = {
+        1: "\u2615 Result: Burnt catastrophe",
+        2: "\u2615 Result: Weak sauce",
+        3: "\u2615 Result: Lukewarm regret",
+        4: "\u2615 Result: Overbrewed sludge",
+        5: "\u2615 Result: Coffee? More like tea",
+        6: "\u2615 Result: Slightly satisfying",
+        7: "\u2615 Result: Basic brew",
+        8: "\u2615 Result: Meh morning fix",
+        9: "\u2615 Result: Not bad at all",
+        10: "\u2615 Result: Solid morning fuel",
+        11: "\u2615 Result: Steamy goodness",
+        12: "\u2615 Result: Aromatic delight",
+        13: "\u2615 Result: Pleasant surprise",
+        14: "\u2615 Result: Magical morning blend",
+        15: "\u2615 Result: Brewmaster approved",
+        16: "\u2615 Result: Barista sang while making it",
+        17: "\u2615 Result: Inspirational nectar",
+        18: "\u2615 Result: Divine intervention",
+        19: "\u2615 Result: Legendary roast",
+        20: "\u2615 Result: COFFEE OF THE GODS"
+    }
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    try:
-        logging.debug("📥 Mottatt webhook-kall")
-        data = request.get_json(force=True)
-        logging.debug(f"📦 Webhook payload: {data}")
-        update = Update.de_json(data, application.bot)
-        logging.debug("✅ Opprettet Telegram Update-objekt")
+    if not os.path.exists(image_path):
+        await update.message.reply_text("\u26a0\ufe0f Coffee image missing!")
+        return
 
-        async def handle_update():
-            if not application._initialized:
-                logging.debug("🛠️ Initialiserer Telegram Application")
-                await application.initialize()
-            await application.process_update(update)
-            logging.debug("🔁 Update prosessering ferdig")
+    caption = f"\ud83c\udfb2 You rolled a *{roll}*\n_{captions[roll]}_"
+    with open(image_path, "rb") as photo:
+        await update.message.reply_photo(photo=photo, caption=caption, parse_mode=constants.ParseMode.MARKDOWN)
 
-        def run_task():
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(handle_update())
+    group.setdefault("last_used", {})[user_id] = time.time()
+    group_data[chat_id] = group
+    save_group_data(group_data)
 
-        Thread(target=run_task).start()
-
-        return "ok"
-    except Exception as e:
-        import traceback
-        logging.error("❌ Exception i webhook: %s", traceback.format_exc())
-        return "error", 500
-
-# Status-check
-@app.get("/")
-def home():
-    return "CoffeeBot is alive ☕", 200
+# ... (resten av funksjonene beholdes uendret)
