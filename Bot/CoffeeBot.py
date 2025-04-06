@@ -5,7 +5,7 @@ import random
 import time
 from flask import Flask, request
 from telegram import Update, constants
-from telegram.ext import Application, CommandHandler, ContextTypes #MyChatMemberHandler
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 from logging.handlers import RotatingFileHandler
 
@@ -133,8 +133,6 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_data[chat_id] = group
     save_group_data(group_data)
 
-
-
 # Toggle bot on/off
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None:
@@ -213,18 +211,6 @@ async def whitelist_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"Group {group_id} was not blacklisted.")
 
-# Log group joins/leaves
-async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.my_chat_member.chat
-    chat_id = str(chat.id)
-    new_status = update.my_chat_member.new_chat_member.status
-    data = load_group_data()
-    if new_status in ["member", "administrator"]:
-        data[chat_id] = {"enabled": True, "title": chat.title, "last_used": {}}
-    elif new_status in ["left", "kicked"] and chat_id in data:
-        del data[chat_id]
-    save_group_data(data)
-
 # Build app
 application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("coffee", coffee))
@@ -234,7 +220,6 @@ application.add_handler(CommandHandler("coffeeban", ban_group))
 application.add_handler(CommandHandler("coffeewhitelist", whitelist_group))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee to get coffee. Admins: /coffeeon /coffeeoff. Owner: /coffeeban /coffeewhitelist.")))
-#application.add_handler(MyChatMemberHandler(handle_my_chat_member))
 
 @app.route(f"/webhook/<secret>", methods=["POST"])
 def webhook(secret):
