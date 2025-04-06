@@ -6,6 +6,9 @@ import time
 from flask import Flask, request
 from telegram import Update, constants
 from telegram.ext import Application, CommandHandler, ContextTypes, MyChatMemberHandler
+import telegram
+print(f"telegram library version: {telegram.__version__}")
+
 
 from logging.handlers import RotatingFileHandler
 
