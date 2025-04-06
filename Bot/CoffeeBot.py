@@ -16,9 +16,8 @@ logging.basicConfig(handlers=[log_handler], level=logging.DEBUG, format="%(ascti
 logger = logging.getLogger("CoffeeBot")
 
 # Telegram Bot Token
-TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("BOT_TOKEN er ikke satt i miljøvariabler")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BASE_URL = os.environ.get("BASE_URL")  # eks: https://coffeebot.onrender.com
 
 # Flask app for webhook
 app = Flask(__name__)
