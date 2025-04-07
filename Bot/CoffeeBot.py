@@ -25,14 +25,14 @@ if not BOT_TOKEN or not WEBHOOK_SECRET or not BASE_URL:
     raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and BASE_URL must be set in environment variables.")
 
 # --- Flask App Setup ---
-flask_app = Flask(__name__)  # Vi kaller denne flask_app for å unngå navnekonflikt
+flask_app = Flask(__name__)
 
 # --- File paths for assets ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DICE_PATH = os.path.join(BASE_DIR, "Dice")
 
 # --- Global in-memory storage for group settings ---
-group_data = {}  # Brukes til å lagre data for grupper (ikke persistent)
+group_data = {}  # Ikke persistent, vil gå tapt ved restart
 
 def load_group_data():
     return group_data
@@ -46,9 +46,8 @@ application = Application.builder().token(BOT_TOKEN).build()
 
 # --- Bot Handlers ---
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("Received /coffee command.")
+    logger.info("User %s invoked /coffee", update.effective_user.username)
     if not update.message:
-        logger.debug("No message in update.")
         return
 
     chat = update.effective_chat
@@ -70,7 +69,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     roll = random.randint(1, 20)
     image_path = os.path.join(DICE_PATH, f"{roll}.png")
-    logger.debug(f"Rolled: {roll}, image path: {image_path}")
+    logger.debug("Rolled: %s, image path: %s", roll, image_path)
 
     captions = {
         1: "☕ Result: Burnt catastrophe", 2: "☕ Result: Weak sauce", 3: "☕ Result: Lukewarm regret",
@@ -83,7 +82,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     if not os.path.exists(image_path):
-        logger.error(f"Image not found: {image_path}")
+        logger.error("Image not found: %s", image_path)
         await update.message.reply_text("⚠️ Coffee image missing!")
         return
 
@@ -105,7 +104,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_group_data(data)
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("Received /coffeeon command.")
+    logger.info("User %s invoked /coffeeon", update.effective_user.username)
     chat = update.effective_chat
     chat_id = str(chat.id)
     if chat.type == "private":
@@ -126,10 +125,10 @@ async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data[chat_id] = {"enabled": True, "title": chat.title, "last_used": {}}
     save_group_data(data)
     await update.message.reply_text("✅ CoffeeBot enabled!")
-    logger.debug(f"Enabled bot in chat {chat_id}")
+    logger.info("Enabled bot in chat %s", chat_id)
 
 async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("Received /coffeeoff command.")
+    logger.info("User %s invoked /coffeeoff", update.effective_user.username)
     chat = update.effective_chat
     chat_id = str(chat.id)
     if chat.type == "private":
@@ -150,7 +149,7 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data[chat_id] = {"enabled": False, "title": chat.title, "last_used": {}}
     save_group_data(data)
     await update.message.reply_text("☕ CoffeeBot disabled!")
-    logger.debug(f"Disabled bot in chat {chat_id}")
+    logger.info("Disabled bot in chat %s", chat_id)
 
 # --- Register command handlers ---
 application.add_handler(CommandHandler("coffee", coffee))
@@ -169,9 +168,14 @@ async def telegram_webhook(secret):
     if request.headers.get("Content-Type") != "application/json":
         return Response("Bad Request: JSON expected", status=400)
     
-    update_data = request.get_json()  # get_json() returnerer et dict
+    update_data = request.get_json()  # returns a dict
     update = Update.de_json(update_data, application.bot)
-    logger.debug("Received update: " + str(update))
+    
+    # Log bare interaksjoner (kommandoer) for sensitive data-sikkerhet:
+    if update.message and update.message.text and update.message.text.startswith("/"):
+        logger.info("Received command: %s", update.message.text)
+    else:
+        logger.debug("Received update with update_id: %s", update.update_id)
     
     # Enqueue the update for PTB's dispatcher to process.
     await application.update_queue.put(update)
@@ -190,7 +194,7 @@ from starlette.routing import Mount
 async def startup():
     full_webhook_url = f"{BASE_URL}/telegram/{WEBHOOK_SECRET}"
     await application.bot.set_webhook(full_webhook_url)
-    logger.info("Webhook set to: " + full_webhook_url)
+    logger.info("Webhook set to: %s", full_webhook_url)
     await application.initialize()
     await application.start()
     logger.info("Telegram Application initialized and started.")
