@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import asyncio
+
 from flask import Flask, request, Response, abort
 from telegram import Update, constants
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -18,10 +19,10 @@ logger = logging.getLogger("CoffeeBot")
 # --- Environment Variables ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
-WEBHOOK_URL = os.getenv("BASE_URL")  # For example, "https://yourapp.onrender.com"
+BASE_URL = os.getenv("BASE_URL")  # f.eks. "https://yourapp.onrender.com"
 
-if not BOT_TOKEN or not WEBHOOK_SECRET or not WEBHOOK_URL:
-    raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and WEBHOOK_URL must be set in environment variables.")
+if not BOT_TOKEN or not WEBHOOK_SECRET or not BASE_URL:
+    raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and BASE_URL must be set in environment variables.")
 
 # --- Flask App Setup ---
 app = Flask(__name__)
@@ -50,7 +51,7 @@ application = Application.builder().token(BOT_TOKEN).build()
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug("Received /coffee command.")
     if not update.message:
-        logger.debug("No message found in update.")
+        logger.debug("No message in update.")
         return
 
     chat = update.effective_chat
@@ -61,12 +62,10 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_data = load_group_data()
     group = group_data.get(chat_id, {})
 
-    # For group chats, bot may be disabled
     if chat.type != "private" and not group.get("enabled", True):
         await update.message.reply_text("🛑 CoffeeBot is currently off in this group.")
         return
 
-    # Rate limit: 15 seconds per user
     last_used = group.get("last_used", {}).get(user_id, 0)
     if time.time() - last_used < 15:
         await update.message.reply_text("⏳ Whoa there, barista! Wait before brewing again.")
@@ -74,7 +73,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     roll = random.randint(1, 20)
     image_path = os.path.join(DICE_PATH, f"{roll}.png")
-    logger.debug(f"Rolled: {roll} ; Image path: {image_path}")
+    logger.debug(f"Rolled: {roll}, image path: {image_path}")
 
     captions = {
         1: "☕ Result: Burnt catastrophe", 2: "☕ Result: Weak sauce", 3: "☕ Result: Lukewarm regret",
@@ -104,7 +103,6 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Error sending photo:")
         await update.message.reply_text(caption)
 
-    # Update rate limiting info
     group.setdefault("last_used", {})[user_id] = time.time()
     group_data[chat_id] = group
     save_group_data(group_data)
@@ -165,7 +163,6 @@ application.add_handler(CommandHandler("start", lambda update, context: update.m
 application.add_handler(CommandHandler("help", lambda update, context: update.message.reply_text("Commands: /coffee, /coffeeon, /coffeeoff")))
 
 # --- Flask Webhook Endpoint ---
-# Using an async route (Flask 2.3+ required)
 @app.route("/telegram/<secret>", methods=["POST"])
 async def telegram_webhook(secret):
     if secret != WEBHOOK_SECRET:
@@ -179,7 +176,7 @@ async def telegram_webhook(secret):
     update = Update.de_json(update_data, application.bot)
     logger.debug("Received update: " + str(update))
     
-    # Enqueue update for processing by PTB's dispatcher
+    # Enqueue the update for PTB's dispatcher to process.
     await application.update_queue.put(update)
     return Response("ok", status=200)
 
@@ -187,27 +184,34 @@ async def telegram_webhook(secret):
 def home():
     return "CoffeeBot is alive ☕", 200
 
-# --- ASGI Server Runner ---
-# We convert our Flask app to ASGI using WsgiToAsgi and run it with Uvicorn
-import uvicorn
+# --- ASGI Wrapper with Starlette ---
 from asgiref.wsgi import WsgiToAsgi
+from starlette.applications import Starlette
+from starlette.routing import Mount
 
-async def main():
-    # Set webhook with Telegram to point to our public URL + secret
-    full_webhook_url = f"{WEBHOOK_URL}/telegram/{WEBHOOK_SECRET}"
+# Define startup and shutdown events for the bot.
+async def startup():
+    full_webhook_url = f"{BASE_URL}/telegram/{WEBHOOK_SECRET}"
     await application.bot.set_webhook(full_webhook_url)
     logger.info("Webhook set to: " + full_webhook_url)
-    
-    # Run the Telegram bot and the web server concurrently
-    # Using a single asyncio event loop for both components:
-    async with application:
-        # Convert Flask app to ASGI app
-        asgi_app = WsgiToAsgi(app)
-        port = int(os.environ.get("PORT", 5000))
-        config = uvicorn.Config(asgi_app, host="0.0.0.0", port=port, log_level="info")
-        server = uvicorn.Server(config)
-        logger.info("Starting ASGI server...")
-        await server.serve()
+    await application.initialize()
+    await application.start()
+    logger.info("Telegram Application initialized and started.")
 
-if __name__ == "__main__":
-    asyncio.run(main())
+async def shutdown():
+    await application.stop()
+    logger.info("Telegram Application stopped.")
+
+# Create a Starlette app that mounts the Flask app (converted to ASGI).
+asgi_app = Starlette(
+    debug=True,
+    routes=[
+        Mount("/", app=WsgiToAsgi(app))
+    ],
+    on_startup=[startup],
+    on_shutdown=[shutdown]
+)
+
+# Eksponer asgi_app som hovedapplikasjon for Gunicorn/uvicorn.
+# Du skal starte gunicorn med:
+# gunicorn Bot.CoffeeBot:asgi_app --worker-class uvicorn.workers.UvicornWorker
