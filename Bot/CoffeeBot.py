@@ -48,7 +48,7 @@ def save_group_data(data):
 # === Telegram Application ===
 application = Application.builder().token(TOKEN).build()
 
-# --- Kommando-funksjoner med logging ---
+# --- Kommando-funksjoner ---
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug("coffee-kommando mottatt.")
     if not update.message:
@@ -64,6 +64,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_data = load_group_data()
     group = group_data.get(chat_id, {})
 
+    # Sjekker om boten er "enabled" i gruppa, men i privat chat er det fritt fram
     if chat.type != "private" and not group.get("enabled", True):
         await update.message.reply_text("🛑 CoffeeBot is currently off in this group.")
         return
@@ -119,7 +120,7 @@ async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
-    except Exception as e:
+    except Exception:
         logger.exception("Feil ved henting av chat member:")
         await update.message.reply_text("Kunne ikke sjekke brukerrettigheter.")
         return
@@ -144,7 +145,7 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
-    except Exception as e:
+    except Exception:
         logger.exception("Feil ved henting av chat member:")
         await update.message.reply_text("Kunne ikke sjekke brukerrettigheter.")
         return
@@ -166,11 +167,12 @@ application.add_handler(CommandHandler("coffeeoff", disable_bot))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee, /coffeeon, /coffeeoff, etc.")))
 
-# === Dedikert event loop for boten i en egen tråd ===
+# === Start Telegram-bot i en egen tråd UANSETT (ikke i if __main__!) ===
 bot_loop = asyncio.new_event_loop()
 
 def start_bot_loop(loop: asyncio.AbstractEventLoop):
     asyncio.set_event_loop(loop)
+    # Kjør initialize() og start()
     loop.run_until_complete(application.initialize())
     loop.run_until_complete(application.start())
     logger.info("Telegram Application initialized and started.")
@@ -188,7 +190,11 @@ def webhook(secret):
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
         logger.debug("Mottok update: " + str(update))
-        asyncio.run_coroutine_threadsafe(application.process_update(update), bot_loop)
+        # Kjør prosesseringen i bot-loopen
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            bot_loop
+        )
     except Exception as e:
         logger.exception("Feil ved behandling av webhook update:")
         return "Error", 500
@@ -197,6 +203,3 @@ def webhook(secret):
 @app.route("/")
 def index():
     return "CoffeeBot is live ☕", 200
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
