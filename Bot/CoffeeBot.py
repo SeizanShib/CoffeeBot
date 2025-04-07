@@ -129,20 +129,14 @@ application.add_handler(CommandHandler("coffeeoff", disable_bot))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee, /coffeeon, /coffeeoff, etc.")))
 
-# === Flask Webhook Route ===
+# === Flask Webhook Route med asyncio.run() ===
 @app.route(f"/webhook/<secret>", methods=["POST"])
 def webhook(secret):
     if secret != WEBHOOK_SECRET:
         return "Unauthorized", 403
 
     update = Update.de_json(request.get_json(force=True), application.bot)
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    loop.create_task(application.process_update(update))
+    asyncio.run(application.process_update(update))
     return "ok", 200
 
 @app.route("/")
