@@ -25,7 +25,7 @@ if not BOT_TOKEN or not WEBHOOK_SECRET or not BASE_URL:
     raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and BASE_URL must be set in environment variables.")
 
 # --- Flask App Setup ---
-app = Flask(__name__)
+flask_app = Flask(__name__)  # Vi kaller denne flask_app for å unngå navnekonflikt
 
 # --- File paths for persistent data ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -163,16 +163,16 @@ application.add_handler(CommandHandler("start", lambda update, context: update.m
 application.add_handler(CommandHandler("help", lambda update, context: update.message.reply_text("Commands: /coffee, /coffeeon, /coffeeoff")))
 
 # --- Flask Webhook Endpoint ---
-@app.route("/telegram/<secret>", methods=["POST"])
+@flask_app.route("/telegram/<secret>", methods=["POST"])
 async def telegram_webhook(secret):
     if secret != WEBHOOK_SECRET:
         logger.warning("Received webhook with incorrect secret.")
         return Response("Unauthorized", status=403)
     
-    if request.headers.get("Content-Type") != "application/json":
+    if flask_app.request.headers.get("Content-Type") != "application/json":
         return Response("Bad Request: JSON expected", status=400)
     
-    update_data = await request.get_json()
+    update_data = await flask_app.request.get_json()
     update = Update.de_json(update_data, application.bot)
     logger.debug("Received update: " + str(update))
     
@@ -180,7 +180,7 @@ async def telegram_webhook(secret):
     await application.update_queue.put(update)
     return Response("ok", status=200)
 
-@app.route("/")
+@flask_app.route("/")
 def home():
     return "CoffeeBot is alive ☕", 200
 
@@ -202,16 +202,16 @@ async def shutdown():
     await application.stop()
     logger.info("Telegram Application stopped.")
 
-# Create a Starlette app that mounts the Flask app (converted to ASGI).
+# Create a Starlette app that mounts the converted Flask app.
 asgi_app = Starlette(
     debug=True,
     routes=[
-        Mount("/", app=WsgiToAsgi(app))
+        Mount("/", app=WsgiToAsgi(flask_app))
     ],
     on_startup=[startup],
     on_shutdown=[shutdown]
 )
 
 # Eksponer asgi_app som hovedapplikasjon for Gunicorn/uvicorn.
-# Du skal starte gunicorn med:
-# gunicorn Bot.CoffeeBot:asgi_app --worker-class uvicorn.workers.UvicornWorker
+# For at Gunicorn skal finne riktig ASGI-app, tilordne asgi_app til variabelen "app".
+app = asgi_app
