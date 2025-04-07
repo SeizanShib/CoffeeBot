@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 import random
 import time
@@ -25,24 +24,23 @@ if not BOT_TOKEN or not WEBHOOK_SECRET or not BASE_URL:
     raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and BASE_URL must be set in environment variables.")
 
 # --- Flask App Setup ---
-flask_app = Flask(__name__)  # Vi kaller denne flask_app for å unngå navnekonflikt
+flask_app = Flask(__name__)
 
-# --- File paths for persistent data ---
+# --- File paths for assets ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DICE_PATH = os.path.join(BASE_DIR, "Dice")
-GROUP_DATA_FILE = os.path.join(BASE_DIR, "group_data.json")
 
-if not os.path.exists(GROUP_DATA_FILE) or os.path.getsize(GROUP_DATA_FILE) == 0:
-    with open(GROUP_DATA_FILE, "w") as f:
-        json.dump({}, f)
+# --- Global in-memory storage for group settings ---
+group_data = {}  # Brukes til å lagre data for grupper (ikke persistent)
 
 def load_group_data():
-    with open(GROUP_DATA_FILE, "r") as f:
-        return json.load(f)
+    return group_data
 
 def save_group_data(data):
-    with open(GROUP_DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    # Med et globalt dictionary trenger vi ikke skrive til fil.
+    # Dette er en no-op-funksjon for kompatibilitet.
+    global group_data
+    group_data = data
 
 # --- Build Telegram Application (PTB v20+) ---
 application = Application.builder().token(BOT_TOKEN).build()
@@ -59,8 +57,8 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(chat.id)
     user_id = str(user.id)
 
-    group_data = load_group_data()
-    group = group_data.get(chat_id, {})
+    data = load_group_data()
+    group = data.get(chat_id, {})
 
     if chat.type != "private" and not group.get("enabled", True):
         await update.message.reply_text("🛑 CoffeeBot is currently off in this group.")
@@ -72,7 +70,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     roll = random.randint(1, 20)
-    image_path = os.path.join(DICE_PATH, f"{roll}.png")
+    image_path = f"{DICE_PATH}/{roll}.png"
     logger.debug(f"Rolled: {roll}, image path: {image_path}")
 
     captions = {
@@ -85,6 +83,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         18: "☕ Result: Divine intervention", 19: "☕ Result: Legendary roast", 20: "☕ Result: COFFEE OF THE GODS"
     }
 
+    # Sjekk at bildet finnes:
     if not os.path.exists(image_path):
         logger.error(f"Image not found: {image_path}")
         await update.message.reply_text("⚠️ Coffee image missing!")
@@ -104,8 +103,8 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(caption)
 
     group.setdefault("last_used", {})[user_id] = time.time()
-    group_data[chat_id] = group
-    save_group_data(group_data)
+    data[chat_id] = group
+    save_group_data(data)
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug("Received /coffeeon command.")
@@ -172,7 +171,7 @@ async def telegram_webhook(secret):
     if request.headers.get("Content-Type") != "application/json":
         return Response("Bad Request: JSON expected", status=400)
     
-    update_data = await request.get_json()
+    update_data = request.get_json()  # get_json() returnerer et dict
     update = Update.de_json(update_data, application.bot)
     logger.debug("Received update: " + str(update))
     
