@@ -18,7 +18,7 @@ logger = logging.getLogger("CoffeeBot")
 # --- Environment Variables ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # For example, "https://yourapp.onrender.com"
+WEBHOOK_URL = os.getenv("BASE_URL")  # For example, "https://yourapp.onrender.com"
 
 if not BOT_TOKEN or not WEBHOOK_SECRET or not WEBHOOK_URL:
     raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and WEBHOOK_URL must be set in environment variables.")
