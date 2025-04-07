@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import random
 import time
@@ -24,7 +25,7 @@ if not BOT_TOKEN or not WEBHOOK_SECRET or not BASE_URL:
     raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and BASE_URL must be set in environment variables.")
 
 # --- Flask App Setup ---
-flask_app = Flask(__name__)
+flask_app = Flask(__name__)  # Vi kaller denne flask_app for å unngå navnekonflikt
 
 # --- File paths for assets ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,8 +38,6 @@ def load_group_data():
     return group_data
 
 def save_group_data(data):
-    # Med et globalt dictionary trenger vi ikke skrive til fil.
-    # Dette er en no-op-funksjon for kompatibilitet.
     global group_data
     group_data = data
 
@@ -70,7 +69,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     roll = random.randint(1, 20)
-    image_path = f"{DICE_PATH}/{roll}.png"
+    image_path = os.path.join(DICE_PATH, f"{roll}.png")
     logger.debug(f"Rolled: {roll}, image path: {image_path}")
 
     captions = {
@@ -83,7 +82,6 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         18: "☕ Result: Divine intervention", 19: "☕ Result: Legendary roast", 20: "☕ Result: COFFEE OF THE GODS"
     }
 
-    # Sjekk at bildet finnes:
     if not os.path.exists(image_path):
         logger.error(f"Image not found: {image_path}")
         await update.message.reply_text("⚠️ Coffee image missing!")
@@ -158,8 +156,8 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("coffeeon", enable_bot))
 application.add_handler(CommandHandler("coffeeoff", disable_bot))
-application.add_handler(CommandHandler("start", lambda update, context: update.message.reply_text("☕ Type /coffee to brew!")))
-application.add_handler(CommandHandler("help", lambda update, context: update.message.reply_text("Commands: /coffee, /coffeeon, /coffeeoff")))
+application.add_handler(CommandHandler("coffeestart", lambda update, context: update.message.reply_text("☕ Type /coffee to brew!")))
+application.add_handler(CommandHandler("coffeehelp", lambda update, context: update.message.reply_text("Commands: /coffee, /coffeeon, /coffeeoff")))
 
 # --- Flask Webhook Endpoint ---
 @flask_app.route("/telegram/<secret>", methods=["POST"])
