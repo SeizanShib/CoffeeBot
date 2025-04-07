@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import asyncio
+from threading import Thread
 from flask import Flask, request
 from telegram import Update, constants
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -44,7 +45,8 @@ def save_group_data(data):
 # === Telegram Application ===
 application = Application.builder().token(TOKEN).build()
 
-# === /coffee ===
+# --- Definer kommandoer ---
+
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -91,7 +93,6 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_data[chat_id] = group
     save_group_data(group_data)
 
-# === Admin commands: Enable/Disable Bot ===
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     chat_id = str(chat.id)
@@ -122,21 +123,35 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_group_data(data)
     await update.message.reply_text("☕ CoffeeBot disabled!")
 
-# === Registrering av Kommando-Handlers ===
+# Registrer kommandoene
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("coffeeon", enable_bot))
 application.add_handler(CommandHandler("coffeeoff", disable_bot))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee, /coffeeon, /coffeeoff, etc.")))
 
-# === Flask Webhook Route med asyncio.run() ===
+# === Opprett en dedikert event loop for boten i en egen tråd ===
+bot_loop = asyncio.new_event_loop()
+
+def start_bot_loop(loop: asyncio.AbstractEventLoop):
+    asyncio.set_event_loop(loop)
+    # Initialiser bot-applikasjonen før loopen kjøres
+    loop.run_until_complete(application.initialize())
+    logger.info("Telegram Application initialized.")
+    loop.run_forever()
+
+# Start bot-loop i en egen tråd
+Thread(target=start_bot_loop, args=(bot_loop,), daemon=True).start()
+
+# === Flask Webhook Route ===
 @app.route(f"/webhook/<secret>", methods=["POST"])
 def webhook(secret):
     if secret != WEBHOOK_SECRET:
         return "Unauthorized", 403
 
     update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
+    # Send update til bot-loop
+    asyncio.run_coroutine_threadsafe(application.process_update(update), bot_loop)
     return "ok", 200
 
 @app.route("/")
@@ -144,4 +159,5 @@ def index():
     return "CoffeeBot is live ☕", 200
 
 if __name__ == "__main__":
+    # Flask-serveren kjøres her (Render vil typisk starte appen via WSGI-server)
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
