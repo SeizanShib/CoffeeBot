@@ -48,8 +48,7 @@ def save_group_data(data):
 # === Telegram Application ===
 application = Application.builder().token(TOKEN).build()
 
-# --- Kommando-funksjoner med ekstra logging ---
-
+# --- Kommando-funksjoner med logging ---
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug("coffee-kommando mottatt.")
     if not update.message:
@@ -104,7 +103,6 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.debug("Melding sendt med bilde.")
     except Exception as e:
         logger.exception("Feil ved sending av bilde:")
-        # Fallback: send tekstmelding
         await update.message.reply_text(caption)
 
     group.setdefault("last_used", {})[user_id] = time.time()
@@ -174,7 +172,8 @@ bot_loop = asyncio.new_event_loop()
 def start_bot_loop(loop: asyncio.AbstractEventLoop):
     asyncio.set_event_loop(loop)
     loop.run_until_complete(application.initialize())
-    logger.info("Telegram Application initialized.")
+    loop.run_until_complete(application.start())
+    logger.info("Telegram Application initialized and started.")
     loop.run_forever()
 
 Thread(target=start_bot_loop, args=(bot_loop,), daemon=True).start()
@@ -189,7 +188,6 @@ def webhook(secret):
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
         logger.debug("Mottok update: " + str(update))
-        # Send update til bot-loop
         asyncio.run_coroutine_threadsafe(application.process_update(update), bot_loop)
     except Exception as e:
         logger.exception("Feil ved behandling av webhook update:")
