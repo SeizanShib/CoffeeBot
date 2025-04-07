@@ -10,7 +10,10 @@ from telegram import Update, constants
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # === Logging ===
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger("CoffeeBot")
 
 # === Miljøvariabler ===
@@ -45,16 +48,19 @@ def save_group_data(data):
 # === Telegram Application ===
 application = Application.builder().token(TOKEN).build()
 
-# --- Definer kommandoer ---
+# --- Kommando-funksjoner med ekstra logging ---
 
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.debug("coffee-kommando mottatt.")
     if not update.message:
+        logger.debug("Ingen melding i update.")
         return
 
     chat = update.effective_chat
     user = update.effective_user
     chat_id = str(chat.id)
     user_id = str(user.id)
+    logger.debug(f"Melding fra chat {chat_id} av bruker {user_id}.")
 
     group_data = load_group_data()
     group = group_data.get(chat_id, {})
@@ -70,6 +76,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     roll = random.randint(1, 20)
     image_path = os.path.join(DICE_PATH, f"{roll}.png")
+    logger.debug(f"Terningkast: {roll}. Sjekker bilde: {image_path}")
 
     captions = {
         1: "☕ Result: Burnt catastrophe", 2: "☕ Result: Weak sauce", 3: "☕ Result: Lukewarm regret",
@@ -82,76 +89,111 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     if not os.path.exists(image_path):
+        logger.error(f"Bilde ikke funnet: {image_path}")
         await update.message.reply_text("⚠️ Coffee image missing!")
         return
 
     caption = f"🎲 You rolled a *{roll}*\n_{captions[roll]}_"
-    with open(image_path, "rb") as photo:
-        await update.message.reply_photo(photo=photo, caption=caption, parse_mode=constants.ParseMode.MARKDOWN)
+    try:
+        with open(image_path, "rb") as photo:
+            await update.message.reply_photo(
+                photo=photo,
+                caption=caption,
+                parse_mode=constants.ParseMode.MARKDOWN
+            )
+        logger.debug("Melding sendt med bilde.")
+    except Exception as e:
+        logger.exception("Feil ved sending av bilde:")
+        # Fallback: send tekstmelding
+        await update.message.reply_text(caption)
 
     group.setdefault("last_used", {})[user_id] = time.time()
     group_data[chat_id] = group
     save_group_data(group_data)
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.debug("enable_bot-kommando mottatt.")
     chat = update.effective_chat
     chat_id = str(chat.id)
     if chat.type == "private":
-        return await update.message.reply_text("Bruk denne kommandoen i en gruppe.")
+        await update.message.reply_text("Bruk denne kommandoen i en gruppe.")
+        return
 
-    member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
+    try:
+        member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
+    except Exception as e:
+        logger.exception("Feil ved henting av chat member:")
+        await update.message.reply_text("Kunne ikke sjekke brukerrettigheter.")
+        return
+
     if member.status not in ["creator", "administrator"]:
-        return await update.message.reply_text("Only group admins can enable the bot.")
+        await update.message.reply_text("Only group admins can enable the bot.")
+        return
 
     data = load_group_data()
     data[chat_id] = {"enabled": True, "title": chat.title, "last_used": {}}
     save_group_data(data)
     await update.message.reply_text("✅ CoffeeBot enabled!")
+    logger.debug("CoffeeBot enabled i chat " + chat_id)
 
 async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.debug("disable_bot-kommando mottatt.")
     chat = update.effective_chat
     chat_id = str(chat.id)
     if chat.type == "private":
-        return await update.message.reply_text("Bruk denne kommandoen i en gruppe.")
+        await update.message.reply_text("Bruk denne kommandoen i en gruppe.")
+        return
 
-    member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
+    try:
+        member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
+    except Exception as e:
+        logger.exception("Feil ved henting av chat member:")
+        await update.message.reply_text("Kunne ikke sjekke brukerrettigheter.")
+        return
+
     if member.status not in ["creator", "administrator"]:
-        return await update.message.reply_text("Only group admins can disable the bot.")
+        await update.message.reply_text("Only group admins can disable the bot.")
+        return
 
     data = load_group_data()
     data[chat_id] = {"enabled": False, "title": chat.title, "last_used": {}}
     save_group_data(data)
     await update.message.reply_text("☕ CoffeeBot disabled!")
+    logger.debug("CoffeeBot disabled i chat " + chat_id)
 
-# Registrer kommandoene
+# Registrer kommandoer
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("coffeeon", enable_bot))
 application.add_handler(CommandHandler("coffeeoff", disable_bot))
 application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
 application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee, /coffeeon, /coffeeoff, etc.")))
 
-# === Opprett en dedikert event loop for boten i en egen tråd ===
+# === Dedikert event loop for boten i en egen tråd ===
 bot_loop = asyncio.new_event_loop()
 
 def start_bot_loop(loop: asyncio.AbstractEventLoop):
     asyncio.set_event_loop(loop)
-    # Initialiser bot-applikasjonen før loopen kjøres
     loop.run_until_complete(application.initialize())
     logger.info("Telegram Application initialized.")
     loop.run_forever()
 
-# Start bot-loop i en egen tråd
 Thread(target=start_bot_loop, args=(bot_loop,), daemon=True).start()
 
 # === Flask Webhook Route ===
 @app.route(f"/webhook/<secret>", methods=["POST"])
 def webhook(secret):
     if secret != WEBHOOK_SECRET:
+        logger.warning("Webhook med feil secret forsøkt.")
         return "Unauthorized", 403
 
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    # Send update til bot-loop
-    asyncio.run_coroutine_threadsafe(application.process_update(update), bot_loop)
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        logger.debug("Mottok update: " + str(update))
+        # Send update til bot-loop
+        asyncio.run_coroutine_threadsafe(application.process_update(update), bot_loop)
+    except Exception as e:
+        logger.exception("Feil ved behandling av webhook update:")
+        return "Error", 500
     return "ok", 200
 
 @app.route("/")
@@ -159,5 +201,4 @@ def index():
     return "CoffeeBot is live ☕", 200
 
 if __name__ == "__main__":
-    # Flask-serveren kjøres her (Render vil typisk starte appen via WSGI-server)
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
