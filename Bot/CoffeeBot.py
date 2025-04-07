@@ -184,7 +184,12 @@ def webhook(secret):
     if secret != WEBHOOK_SECRET:
         return "Unauthorized", 403
     update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    loop.create_task(application.process_update(update))
     return "ok", 200
 
 @app.route("/")
