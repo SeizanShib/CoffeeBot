@@ -169,10 +169,10 @@ async def telegram_webhook(secret):
         logger.warning("Received webhook with incorrect secret.")
         return Response("Unauthorized", status=403)
     
-    if flask_app.request.headers.get("Content-Type") != "application/json":
+    if request.headers.get("Content-Type") != "application/json":
         return Response("Bad Request: JSON expected", status=400)
     
-    update_data = await flask_app.request.get_json()
+    update_data = await request.get_json()
     update = Update.de_json(update_data, application.bot)
     logger.debug("Received update: " + str(update))
     
