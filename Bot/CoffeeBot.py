@@ -4,39 +4,37 @@ import logging
 import random
 import time
 import asyncio
-from threading import Thread
-from flask import Flask, request
+from flask import Flask, request, Response, abort
 from telegram import Update, constants
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# === Logging ===
+# --- Logging configuration ---
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("CoffeeBot")
 
-# === Miljøvariabler ===
-TOKEN = os.getenv("BOT_TOKEN")
+# --- Environment Variables ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # For example, "https://yourapp.onrender.com"
 
-if not TOKEN or not WEBHOOK_SECRET:
-    raise ValueError("BOT_TOKEN og WEBHOOK_SECRET må være satt som miljøvariabler")
+if not BOT_TOKEN or not WEBHOOK_SECRET or not WEBHOOK_URL:
+    raise ValueError("BOT_TOKEN, WEBHOOK_SECRET, and WEBHOOK_URL must be set in environment variables.")
 
-# === Flask-app ===
+# --- Flask App Setup ---
 app = Flask(__name__)
 
-# === Filstier ===
+# --- File paths for persistent data ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DICE_PATH = os.path.join(BASE_DIR, "Dice")
 GROUP_DATA_FILE = os.path.join(BASE_DIR, "group_data.json")
 
-# === Init tomme JSON-filer hvis de ikke finnes eller er tomme ===
 if not os.path.exists(GROUP_DATA_FILE) or os.path.getsize(GROUP_DATA_FILE) == 0:
     with open(GROUP_DATA_FILE, "w") as f:
         json.dump({}, f)
 
-# === JSON helpers ===
 def load_group_data():
     with open(GROUP_DATA_FILE, "r") as f:
         return json.load(f)
@@ -45,30 +43,30 @@ def save_group_data(data):
     with open(GROUP_DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# === Telegram Application ===
-application = Application.builder().token(TOKEN).build()
+# --- Build Telegram Application (PTB v20+) ---
+application = Application.builder().token(BOT_TOKEN).build()
 
-# --- Kommando-funksjoner ---
+# --- Bot Handlers ---
 async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("coffee-kommando mottatt.")
+    logger.debug("Received /coffee command.")
     if not update.message:
-        logger.debug("Ingen melding i update.")
+        logger.debug("No message found in update.")
         return
 
     chat = update.effective_chat
     user = update.effective_user
     chat_id = str(chat.id)
     user_id = str(user.id)
-    logger.debug(f"Melding fra chat {chat_id} av bruker {user_id}.")
 
     group_data = load_group_data()
     group = group_data.get(chat_id, {})
 
-    # Sjekker om boten er "enabled" i gruppa, men i privat chat er det fritt fram
+    # For group chats, bot may be disabled
     if chat.type != "private" and not group.get("enabled", True):
         await update.message.reply_text("🛑 CoffeeBot is currently off in this group.")
         return
 
+    # Rate limit: 15 seconds per user
     last_used = group.get("last_used", {}).get(user_id, 0)
     if time.time() - last_used < 15:
         await update.message.reply_text("⏳ Whoa there, barista! Wait before brewing again.")
@@ -76,7 +74,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     roll = random.randint(1, 20)
     image_path = os.path.join(DICE_PATH, f"{roll}.png")
-    logger.debug(f"Terningkast: {roll}. Sjekker bilde: {image_path}")
+    logger.debug(f"Rolled: {roll} ; Image path: {image_path}")
 
     captions = {
         1: "☕ Result: Burnt catastrophe", 2: "☕ Result: Weak sauce", 3: "☕ Result: Lukewarm regret",
@@ -89,7 +87,7 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     if not os.path.exists(image_path):
-        logger.error(f"Bilde ikke funnet: {image_path}")
+        logger.error(f"Image not found: {image_path}")
         await update.message.reply_text("⚠️ Coffee image missing!")
         return
 
@@ -101,28 +99,28 @@ async def coffee(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=caption,
                 parse_mode=constants.ParseMode.MARKDOWN
             )
-        logger.debug("Melding sendt med bilde.")
+        logger.debug("Sent coffee photo.")
     except Exception as e:
-        logger.exception("Feil ved sending av bilde:")
+        logger.exception("Error sending photo:")
         await update.message.reply_text(caption)
 
+    # Update rate limiting info
     group.setdefault("last_used", {})[user_id] = time.time()
     group_data[chat_id] = group
     save_group_data(group_data)
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("enable_bot-kommando mottatt.")
+    logger.debug("Received /coffeeon command.")
     chat = update.effective_chat
     chat_id = str(chat.id)
     if chat.type == "private":
-        await update.message.reply_text("Bruk denne kommandoen i en gruppe.")
+        await update.message.reply_text("Please use this command in a group.")
         return
-
     try:
         member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
     except Exception:
-        logger.exception("Feil ved henting av chat member:")
-        await update.message.reply_text("Kunne ikke sjekke brukerrettigheter.")
+        logger.exception("Error fetching chat member.")
+        await update.message.reply_text("Could not verify admin status.")
         return
 
     if member.status not in ["creator", "administrator"]:
@@ -133,21 +131,20 @@ async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data[chat_id] = {"enabled": True, "title": chat.title, "last_used": {}}
     save_group_data(data)
     await update.message.reply_text("✅ CoffeeBot enabled!")
-    logger.debug("CoffeeBot enabled i chat " + chat_id)
+    logger.debug(f"Enabled bot in chat {chat_id}")
 
 async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("disable_bot-kommando mottatt.")
+    logger.debug("Received /coffeeoff command.")
     chat = update.effective_chat
     chat_id = str(chat.id)
     if chat.type == "private":
-        await update.message.reply_text("Bruk denne kommandoen i en gruppe.")
+        await update.message.reply_text("Please use this command in a group.")
         return
-
     try:
         member = await context.bot.get_chat_member(chat.id, update.effective_user.id)
     except Exception:
-        logger.exception("Feil ved henting av chat member:")
-        await update.message.reply_text("Kunne ikke sjekke brukerrettigheter.")
+        logger.exception("Error fetching chat member.")
+        await update.message.reply_text("Could not verify admin status.")
         return
 
     if member.status not in ["creator", "administrator"]:
@@ -158,48 +155,59 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data[chat_id] = {"enabled": False, "title": chat.title, "last_used": {}}
     save_group_data(data)
     await update.message.reply_text("☕ CoffeeBot disabled!")
-    logger.debug("CoffeeBot disabled i chat " + chat_id)
+    logger.debug(f"Disabled bot in chat {chat_id}")
 
-# Registrer kommandoer
+# --- Register command handlers ---
 application.add_handler(CommandHandler("coffee", coffee))
 application.add_handler(CommandHandler("coffeeon", enable_bot))
 application.add_handler(CommandHandler("coffeeoff", disable_bot))
-application.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("☕ Type /coffee to brew!")))
-application.add_handler(CommandHandler("help", lambda u, c: u.message.reply_text("Use /coffee, /coffeeon, /coffeeoff, etc.")))
+application.add_handler(CommandHandler("start", lambda update, context: update.message.reply_text("☕ Type /coffee to brew!")))
+application.add_handler(CommandHandler("help", lambda update, context: update.message.reply_text("Commands: /coffee, /coffeeon, /coffeeoff")))
 
-# === Start Telegram-bot i en egen tråd UANSETT (ikke i if __main__!) ===
-bot_loop = asyncio.new_event_loop()
-
-def start_bot_loop(loop: asyncio.AbstractEventLoop):
-    asyncio.set_event_loop(loop)
-    # Kjør initialize() og start()
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
-    logger.info("Telegram Application initialized and started.")
-    loop.run_forever()
-
-Thread(target=start_bot_loop, args=(bot_loop,), daemon=True).start()
-
-# === Flask Webhook Route ===
-@app.route(f"/webhook/<secret>", methods=["POST"])
-def webhook(secret):
+# --- Flask Webhook Endpoint ---
+# Using an async route (Flask 2.3+ required)
+@app.route("/telegram/<secret>", methods=["POST"])
+async def telegram_webhook(secret):
     if secret != WEBHOOK_SECRET:
-        logger.warning("Webhook med feil secret forsøkt.")
-        return "Unauthorized", 403
-
-    try:
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        logger.debug("Mottok update: " + str(update))
-        # Kjør prosesseringen i bot-loopen
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            bot_loop
-        )
-    except Exception as e:
-        logger.exception("Feil ved behandling av webhook update:")
-        return "Error", 500
-    return "ok", 200
+        logger.warning("Received webhook with incorrect secret.")
+        return Response("Unauthorized", status=403)
+    
+    if request.headers.get("Content-Type") != "application/json":
+        return Response("Bad Request: JSON expected", status=400)
+    
+    update_data = await request.get_json()
+    update = Update.de_json(update_data, application.bot)
+    logger.debug("Received update: " + str(update))
+    
+    # Enqueue update for processing by PTB's dispatcher
+    await application.update_queue.put(update)
+    return Response("ok", status=200)
 
 @app.route("/")
-def index():
-    return "CoffeeBot is live ☕", 200
+def home():
+    return "CoffeeBot is alive ☕", 200
+
+# --- ASGI Server Runner ---
+# We convert our Flask app to ASGI using WsgiToAsgi and run it with Uvicorn
+import uvicorn
+from asgiref.wsgi import WsgiToAsgi
+
+async def main():
+    # Set webhook with Telegram to point to our public URL + secret
+    full_webhook_url = f"{WEBHOOK_URL}/telegram/{WEBHOOK_SECRET}"
+    await application.bot.set_webhook(full_webhook_url)
+    logger.info("Webhook set to: " + full_webhook_url)
+    
+    # Run the Telegram bot and the web server concurrently
+    # Using a single asyncio event loop for both components:
+    async with application:
+        # Convert Flask app to ASGI app
+        asgi_app = WsgiToAsgi(app)
+        port = int(os.environ.get("PORT", 5000))
+        config = uvicorn.Config(asgi_app, host="0.0.0.0", port=port, log_level="info")
+        server = uvicorn.Server(config)
+        logger.info("Starting ASGI server...")
+        await server.serve()
+
+if __name__ == "__main__":
+    asyncio.run(main())
